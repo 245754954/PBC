@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "pbc.h": "c",
+        "pbc_test.h": "c"
+    }
+}
