@@ -85,11 +85,11 @@ int main(int argc, char *argv[])
     // initialization
 
     //生命一系列的变量
-    element_t P,Y,M,W;
-    element_t x;
+    element_t P,U,V,W,temp1,temp3;
+    element_t x,y,m,r,temp2;
     element_t T1,T2;
     clock_t start,stop;
-    int byte;
+    int byte1,byte2;
 
     //以标准输入的形式，初始化配对类型的变量
     //pbc_demo_pairing_init(pairing, argc, argv);
@@ -100,15 +100,20 @@ int main(int argc, char *argv[])
     //将变量P初始化为群G1中的元素
     element_init_G1(P, pairing);
     //将变量temp1初始化为群G1中的元素
- 
-
-    element_init_G1(Y, pairing);
+    element_init_G1(U, pairing);
     //将变量Q初始化为群G2中的元素
-    element_init_G1(M, pairing);
+    element_init_G1(V, pairing);
     //将变量temp2初始化为群G2中的元素
     element_init_G1(W, pairing);
-    //将变量x初始化为群GT中的元素
+    element_init_G1(temp1, pairing);
+    element_init_G1(temp3, pairing);
+
+    //将变量x初始化为群Zr中元素
     element_init_Zr(x, pairing);
+    element_init_Zr(y, pairing);
+    element_init_Zr(m, pairing);
+    element_init_Zr(r, pairing);
+    element_init_Zr(temp2, pairing);
     //将变量y初始化为群GT中的元素
     element_init_GT(T1, pairing);
     //将a初始化未环Zr中的元素
@@ -118,34 +123,74 @@ int main(int argc, char *argv[])
         fprintf(stderr,"only works with symmetic pairing\n");
         exit(1);
     }
-    printf("BLS Scheme\n");
-    printf("system setup\n");
+    printf("BB Scheme\n");
+    printf("KeyGen\n");
     start = clock();
     //随机选择G1中的一个元素赋值给P
-    element_random(P);
+    //生成签名这的私钥x,y
     element_random(x);
-    element_mul_zn(Y, P, x);
+    element_random(y);
+    //生成G1的生成元P
+    element_random(P);
+    //计算U=xP，这是公钥 
+    element_mul_zn(U, P, x);
+    //计算公钥 V=yP
+    element_mul_zn(V, P, y);
     stop = clock();
-    printf("the time of setup phase %fs\n",(double)(stop-start));
+    printf("the generator of G1 is : \n");
     element_printf("P=%B\n",P);
-    element_printf("private key is x=%B\n",x);
-    element_printf("public key is y=%B\n",Y);
+    printf("the private key is :\n");
+    element_printf("x =%B\n",x);
+    element_printf("y =%B\n",y);
+    printf("the public  key is :\n");
+    element_printf("U =%B\n",U);
+    element_printf("V =%B\n",V);
+    printf("the time of KeyGen phase %fs\n",(double)(stop-start));
 
+    printf("Sign\n");
     //签名
     start = clock();
-    element_from_hash(M,"messageofsign",13);
-    element_mul_zn(W ,M, x);
+    //生成要要钱名的消息m
+    element_random(m);
+    //生成签名这选择的随机数r
+    element_random(r);
+    //计算temp2 = ry
+    element_mul(temp2,y,r);
+    //计算temp2 = temp2+m 也就是temp2 = m+ry
+    element_add(temp2,temp2,m);
+    //计算temp2 = x+m+ry
+    element_add(temp2,temp2,x);
+    //如果x+m+ry不为0,计算其逆元
+    if(!element_is0(temp2)){
+        element_invert(temp2,temp2);
+        element_mul_zn(W,P,temp2);
+    }else{
+
+        printf("choose another random number r!\n");
+        exit(1);
+    }
+
     stop  = clock();
+    printf("the message is m :\n");
+    element_printf("m = %B\n",m);
+    printf("the signature of message is \n");
+    element_printf("W=  %B\n",W);
+    element_printf("r=  %B\n",r);
     printf("the time of signing phase %fs\n",(double)(stop-start));
-    element_printf("the value of M %B\n",M);
-    element_printf("the value of W %B\n",W);
 
     printf("Verify\n");
     start = clock();
-    pairing_apply(T1,P,W,pairing);
-    element_from_hash(M,"messageofhash",13);
-    pairing_apply(T2,Y,M,pairing);
-
+    //计算temp1 = rV
+    element_mul_zn(temp1,V,r);
+    //计算temp3 = mP
+    element_mul_zn(temp3,P,m);
+    //计算temp1 = mP+rV
+    element_add(temp1,temp1,temp3);
+    //计算temp1 = U+mP+rV
+    element_add(temp1,temp1,U);
+    //计算T1 = e(U+mP+rV,W)
+    pairing_apply(T1,temp1,W,pairing);
+    pairing_apply(T2,P,P,pairing);
     if(!element_cmp(T1,T2)){
 
         printf("the signature is valid\n");
@@ -155,49 +200,23 @@ int main(int argc, char *argv[])
     }
     stop  = clock();
     printf("the time of verify phase %fs\n",(double)(stop-start));
-    int n = element_length_in_bytes_compressed(W);
-    unsigned char *data = pbc_malloc(n);
-    element_to_bytes_compressed(data,W);
-    printf("the value of len %d\n",n);
-    char buf[512]={'\0'};
-    char tmp[3]={'\0'};
-    int i=0;
-    printf("coord = ");
-    //将以将为什么需要将字符串专程十六进制字符串，：
-    //因为c语言中一个字符占8个bit，0-255之间能表示一些特殊的字符，例如问号
-    //为了打印的时候不显示特殊的字符，需要将一个字节拆成高四位和低四位，
-    //高四位前面补四位0,低四位前面补四个0,这样一个字符，就变成了两个字符，
-    //但是打印出来以后就没有一些特殊的符号了，更有利于人们的观察
-    for (i = 0; i < n; i++) {
-      sprintf(tmp,"%02X", data[i]);//X 表示以十六进制形式输出 02 表示不足两位,前面补0输出 
-      strcat(buf,tmp);
-    }
-    printf("the len of strlen(buf) %ld\n",strlen(buf));
-    printf("the value of str %s\n",buf);
-    char str[128]={'\0'};
-    //将字节数组转换成十六进制字数组，注意：十六进制字节数组只是字节数组的一个子集
-    //字节数组按%c打印出来，仍然还有许多不好认识的字节，但是转成十六进制字节以后就都是可以认识的
-    ByteToHexStr(data,str,n);
-    printf("the value of str %s\n",str);
-    printf("\n");
 
 
-    unsigned char data1[512]={'\0'};
-    HexStrToByte(str,data1,strlen(str));
-    unsigned char hui[128]={'\0'};
-    element_from_bytes_compressed(W, data1);//解压
-    element_printf("decompressed = %B\n", W);
+    printf("the signature of message is \n");
+    element_printf("e(p,p)=   %B\n",T2);
+    element_printf("e(U+mP+rV,W)=   %B\n",T1);
 
-
-    
-
-    pbc_free(data);
-    
     element_clear(P);
-    element_clear(Y);
-    element_clear(M);
+    element_clear(U);
+    element_clear(temp1);
+    element_clear(V);
     element_clear(W);
+    element_clear(temp3);
     element_clear(x);
+    element_clear(y);
+    element_clear(m);
+    element_clear(r);
+     element_clear(temp2);
     element_clear(T1);
     element_clear(T2);
     pairing_clear(pairing);
