@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "pbc.h": "c",
-        "pbc_test.h": "c"
+        "pbc_test.h": "c",
+        "string.h": "c"
     }
 }

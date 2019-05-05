@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
     //以标准输入的形式，初始化配对类型的变量
     //pbc_demo_pairing_init(pairing, argc, argv);
     //第二个参数是群的阶未r，是40bit的素数，域的阶为q是50bit长的数典型至未160和512
-    pbc_param_init_a_gen(par, 40, 50);
+    pbc_param_init_a_gen(par, 40, 60);
     pairing_init_pbc_param(pairing, par);
 
     //将变量P初始化为群G1中的元素
